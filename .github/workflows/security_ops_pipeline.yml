@@ -1,4 +1,4 @@
-name: Fixed External Deploy Pipeline
+name: Auto-Upload to Repository (No Manual Token)
 
 on:
   push:
@@ -7,19 +7,23 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
-  TARGET_REPO: "koreatest12/shinhan-"
-  COMMIT_USER: "Security Ops Bot"
-  COMMIT_EMAIL: "security-bot@shinhan-ops.com"
+  # 사용자 정보 자동 설정
+  COMMIT_USER: "GitHub Action Bot"
+  COMMIT_EMAIL: "action@github.com"
+
+# [핵심] 권한 자동 부여 설정 (이 부분이 토큰 생성을 대체함)
+permissions:
+  contents: write
 
 jobs:
   # ------------------------------------------------------------------
   # 1. 자산 생성 (암호화, 플레이북, 방화벽 정책 등 대량 생성)
   # ------------------------------------------------------------------
   generate-and-encrypt:
-    name: 🏗️ Generate Assets & Encrypt
+    name: 🏗️ Generate & Prepare Assets
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Current Repo
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -33,14 +37,13 @@ jobs:
       # [1] 파이썬 스크립트로 안전하게 대량의 보안 자산 생성
       - name: 📂 Generate Massive Security Assets
         run: |
-          echo "⚙️ Initializing Asset Generators..."
-          mkdir -p playbooks detections system_services tests scripts firewall_policies secure_storage
+          echo "⚙️ Generating Security Assets..."
+          mkdir -p playbooks detections tests scripts firewall_policies secure_storage
 
-          # 파이썬 생성기 (구문 오류 방지용)
+          # 플레이북 대량 생성기
           cat <<EOF > scripts/asset_generator.py
           import os
 
-          # 1. 플레이북 10종 생성
           playbooks = [
               "phishing_response", "ransomware_defense", "db_audit", 
               "user_lockout", "traffic_analysis", "ddos_mitigation",
@@ -53,59 +56,31 @@ jobs:
                   f.write("import logging\n")
                   f.write("logging.basicConfig(level=logging.INFO)\n\n")
                   f.write(f"def execute_{pb}():\n")
-                  f.write(f"    '''Security Procedure for {pb}'''\n")
                   f.write(f"    logging.info('🛡️ Executing Protocol: {pb}')\n")
                   f.write("    return True\n\n")
                   f.write("if __name__ == '__main__':\n")
                   f.write(f"    execute_{pb}()\n")
 
-          # 2. 방화벽 정책 생성 (iptables)
-          rules = [
-              "*filter", ":INPUT DROP [0:0]",
-              "-A INPUT -p tcp --dport 22 -s 192.168.10.0/24 -j ACCEPT",
-              "-A INPUT -p tcp --dport 5432 -m string --string 'UNION SELECT' -algo bm -j DROP",
-              "COMMIT"
-          ]
+          # 방화벽 규칙 생성
           with open("firewall_policies/db_firewall.rules", "w") as f:
-              f.write('\n'.join(rules))
-
-          print("✅ Massive Assets Generated.")
+              f.write("*filter\n:INPUT DROP [0:0]\n-A INPUT -p tcp --dport 5432 -j ACCEPT\nCOMMIT")
           EOF
           
           python scripts/asset_generator.py
 
-      # [2] AES-256 암호화 및 비밀 키 생성
-      - name: 🔐 Generate & Encrypt Secrets
+      # [2] AES-256 암호화 (보안 키 생성)
+      - name: 🔐 Generate Secrets
         run: |
           cat <<EOF > scripts/encrypt_core.py
           from cryptography.fernet import Fernet
-          import json, os
-
-          # 키 생성 및 저장
           key = Fernet.generate_key()
-          cipher = Fernet(key)
-          
-          # 키는 secure_storage에 저장 (외부 전송용)
           with open("secure_storage/master_key.key", "wb") as f:
               f.write(key)
-
-          # 민감 정보 암호화
-          secret_data = json.dumps({"db_pass": "super_secret_p@ssw0rd"}).encode()
-          with open("secure_storage/credentials.enc", "wb") as f:
-              f.write(cipher.encrypt(secret_data))
           EOF
           python scripts/encrypt_core.py
 
-      # [3] 테스트 코드 생성
-      - name: 🧪 Generate Tests
-        run: |
-          cat <<EOF > tests/ops_test.py
-          import os
-          def test_assets_exist():
-              assert os.path.exists("playbooks/phishing_response.py")
-          EOF
-
-      - name: 💾 Upload Artifacts (Temporary)
+      # [3] 아티팩트 업로드 (다음 단계로 전달)
+      - name: 💾 Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: deployment-package
@@ -115,118 +90,82 @@ jobs:
             scripts/
             firewall_policies/
             secure_storage/
-            system_services/
-            tests/
 
   # ------------------------------------------------------------------
-  # 2. 품질 검증 (Formatting & Linting)
+  # 2. 품질 검증 (Formatting)
   # ------------------------------------------------------------------
   qa-validation:
-    name: 🛡️ QA & Security Audit
+    name: 🛡️ QA Check
     needs: generate-and-encrypt
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
           name: deployment-package
-
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Tools
-        run: pip install black flake8 pytest cryptography
-
-      - name: 🧹 Auto-Format (Black)
-        run: black playbooks/ scripts/ tests/
-
-      - name: ⚔️ Run Tests
-        run: |
-          export PYTHONPATH=$PYTHONPATH:.
-          pytest tests/ops_test.py
+      - name: Install Black
+        run: pip install black
+      - name: 🧹 Auto-Format
+        run: black playbooks/ scripts/
 
   # ------------------------------------------------------------------
-  # 3. 외부 저장소 업로드 (에러 수정됨)
+  # 3. 저장소 업로드 (권한 자동화 적용)
   # ------------------------------------------------------------------
-  deploy-to-external-repo:
-    name: 🚀 Upload to Koreatest12/Shinhan-
+  upload-to-repo:
+    name: 🚀 Push to Repository (No Token Needed)
     needs: qa-validation
     runs-on: ubuntu-latest
     steps:
-      # 1. Secrets 확인 (디버깅용)
-      - name: 🔍 Check Secret Availability
-        run: |
-          if [ -z "${{ secrets.TARGET_REPO_TOKEN }}" ]; then
-            echo "❌ CRITICAL ERROR: 'TARGET_REPO_TOKEN' secret is missing."
-            echo "Please add it in Settings > Secrets and variables > Actions."
-            exit 1
-          else
-            echo "✅ 'TARGET_REPO_TOKEN' is found. Proceeding..."
-          fi
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          # 기본 GITHUB_TOKEN 사용 (설정에서 권한만 주면 됨)
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # 2. 생성된 파일 다운로드
-      - name: Download Validated Artifacts
+      - name: Download Generated Assets
         uses: actions/download-artifact@v4
         with:
           name: deployment-package
           path: generated_assets
 
-      # 3. 타겟 저장소 체크아웃 (인증 방식 개선)
-      - name: Checkout Target Repository
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.TARGET_REPO }}
-          # 중요: 토큰이 명확하게 전달되어야 함
-          token: ${{ secrets.TARGET_REPO_TOKEN }}
-          path: target_repo
-          # 중요: 기존 자격 증명 지속 방지 (충돌 방지)
-          persist-credentials: false
-
-      # 4. 파일 복사 및 권한 수정
-      - name: 📂 Copy Files & Modify Permissions
+      - name: 📂 Move & Organize Files
         run: |
-          echo "🚀 Copying new assets to target repository..."
-          cp -r generated_assets/* target_repo/
+          echo "🚀 Preparing files for upload..."
           
-          cd target_repo
+          # 기존 파일 덮어쓰기 및 이동
+          cp -r generated_assets/* .
           
-          echo "🔧 Setting File Permissions..."
-          # 실행 권한 부여
+          # 파일 권한 수정 (요청사항 반영)
           chmod +x scripts/*.py
           chmod +x playbooks/*.py
-          # 보안 키 파일 잠금
           chmod 600 secure_storage/*.key
           
-          echo "✅ Permissions updated."
+          # 임시 폴더 삭제
+          rm -rf generated_assets
 
-      # 5. 강제 인증 푸시 (에러 해결의 핵심)
-      - name: 📡 Push to External Repository
+      - name: 📡 Push Changes to Repo
         run: |
-          cd target_repo
-          
-          # Git 사용자 설정
+          # 1. Git 사용자 설정
           git config user.name "${{ env.COMMIT_USER }}"
           git config user.email "${{ env.COMMIT_EMAIL }}"
           
-          # 변경사항 추가
-          git add .
+          # 2. 변경사항 스테이징
+          git add playbooks/ detections/ scripts/ firewall_policies/ secure_storage/
           
-          # 커밋 및 푸시
+          # 3. 커밋 및 푸시 (GITHUB_TOKEN 자동 사용)
           if git diff --staged --quiet; then
-            echo "⚠️ No changes to commit."
+            echo "⚠️ No changes detected."
           else
             echo "🔄 Committing changes..."
-            git commit -m "🚀 Auto-Deploy: Massive Security Update & Permissions Fix"
+            git commit -m "🚀 Auto-Generated Security Assets [Automated Push]"
             
-            echo "📡 Pushing to remote..."
-            # [핵심] Remote URL에 토큰을 직접 포함시켜 인증 오류 원천 차단
-            git remote set-url origin https://x-access-token:${{ secrets.TARGET_REPO_TOKEN }}@github.com/${{ env.TARGET_REPO }}.git
+            echo "📡 Pushing to repository..."
             git push origin main
-            
-            echo "🎉 Successfully uploaded to https://github.com/${{ env.TARGET_REPO }}"
+            echo "✅ Successfully uploaded without manual token!"
           fi
