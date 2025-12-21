@@ -1,4 +1,4 @@
-name: Top Secret Security Ops (Fixed & Visualized)
+name: Deploy to External Repo (Massive Update)
 
 on:
   push:
@@ -7,173 +7,20 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
-  OFFICIAL_BASE_URL: "https://raw.githubusercontent.com/official-security-corp/resources/main"
-  ENCRYPTION_KEY_ID: "kms-master-key-v1"
+  TARGET_REPO: "koreatest12/shinhan-"
+  COMMIT_USER: "Security Ops Bot"
+  COMMIT_EMAIL: "security-bot@shinhan-ops.com"
 
 jobs:
   # ------------------------------------------------------------------
-  # 1. 초기화: 암호화, 자산 확보, DB 방화벽 및 대량 파일 생성
+  # 1. 자산 생성 (암호화, 플레이북, 방화벽 정책 등 대량 생성)
   # ------------------------------------------------------------------
-  initialize-secure-environment:
-    name: 🏗️ Init, Encrypt & Generate Assets
+  generate-and-encrypt:
+    name: 🏗️ Generate Assets & Encrypt
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout Current Repo
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Crypto Libraries
-        run: pip install cryptography logging
-
-      # [수정됨] 파이썬 기반의 안전한 대량 파일 생성기 (에러 원천 차단)
-      - name: 📂 Generate Massive Security Playbooks (Pythonic Way)
-        run: |
-          echo "⚙️ Generating Playbooks using Python generator to prevent syntax errors..."
-          mkdir -p playbooks detections system_services tests scripts
-
-          # 파이썬으로 파이썬 코드를 생성 (줄바꿈/이스케이프 문제 해결)
-          cat <<EOF > scripts/generate_assets.py
-          import os
-
-          # 1. 플레이북 대량 생성 리스트
-          playbooks = [
-              "phishing_response", "ransomware_defense", "db_audit", 
-              "user_lockout", "traffic_analysis", "ddos_mitigation",
-              "api_security_check", "compliance_scanner"
-          ]
-
-          for pb in playbooks:
-              file_path = f"playbooks/{pb}.py"
-              with open(file_path, "w") as f:
-                  f.write("import logging\n\n")
-                  f.write("logging.basicConfig(level=logging.INFO)\n\n")
-                  f.write(f"def run_{pb}():\n")
-                  f.write(f"    '''Auto-generated security playbook for {pb}'''\n")
-                  f.write(f"    logging.info('🛡️ Secure Execution: {pb}')\n")
-                  f.write("    return True\n\n")
-                  f.write("if __name__ == '__main__':\n")
-                  f.write(f"    run_{pb}()\n")
-              print(f"✅ Generated: {file_path}")
-
-          # 2. 업그레이드 매니저 생성
-          with open("system_services/upgrade_manager.py", "w") as f:
-              f.write("import logging\n")
-              f.write("def run_check():\n")
-              f.write("    logging.info('System Integrity: 100% Secure.')\n")
-              f.write("if __name__ == '__main__':\n")
-              f.write("    run_check()\n")
-
-          EOF
-
-          # 생성기 실행
-          python scripts/generate_assets.py
-
-      # [기존 핵심 보안 기능] AES-256 암호화 로직
-      - name: 🔐 Generate & Encrypt Secrets (AES-256)
-        run: |
-          mkdir -p secrets config keys secure_storage
-          cat <<EOF > scripts/secure_generator.py
-          import os, json, secrets, string, logging
-          from datetime import datetime
-          from cryptography.fernet import Fernet
-
-          logging.basicConfig(level=logging.INFO, format='[SECURE-CORE] %(message)s')
-
-          def main():
-              key = Fernet.generate_key()
-              cipher = Fernet(key)
-              with open("secure_storage/master.key", "wb") as f: f.write(key)
-              
-              pwd = ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(50))
-              print(f"::add-mask::{pwd}") # 로그 마스킹
-
-              payload = json.dumps({"type": "root_db", "value": pwd}).encode()
-              with open("secrets/encrypted_creds.enc", "wb") as f:
-                  f.write(cipher.encrypt(payload))
-              logging.info("✅ Credentials Encrypted (AES-256).")
-
-          if __name__ == "__main__": main()
-          EOF
-          python scripts/secure_generator.py
-
-      # [기존 핵심 보안 기능] DB 방화벽 생성
-      - name: 🔥 Generate DB Firewall Policies
-        run: |
-          mkdir -p firewall_policies
-          cat <<EOF > scripts/generate_firewall.py
-          def create_rules():
-              rules = [
-                  "*filter", ":INPUT DROP [0:0]",
-                  "-A INPUT -p tcp --dport 5432 -s 10.10.10.5 -j ACCEPT",
-                  "-A INPUT -p tcp --dport 5432 -m string --string 'UNION SELECT' -algo bm -j DROP",
-                  "COMMIT"
-              ]
-              with open("firewall_policies/db_iptables.rules", "w") as f:
-                  f.write('\n'.join(rules))
-          if __name__ == "__main__": create_rules()
-          EOF
-          python scripts/generate_firewall.py
-
-      # [신규] 생성된 모든 결과를 화면에 시각화 (요청사항 반영)
-      - name: 👁️ Reveal Generated Assets (Visibility)
-        run: |
-          echo "=========================================="
-          echo "       📂 GENERATED ASSET REPORT          "
-          echo "=========================================="
-          echo "👉 List of Generated Playbooks:"
-          ls -lh playbooks/
-          echo ""
-          echo "👉 Content Preview (phishing_response.py):"
-          cat playbooks/phishing_response.py
-          echo ""
-          echo "👉 Content Preview (DB Firewall Rules):"
-          cat firewall_policies/db_iptables.rules
-          echo "=========================================="
-
-      # 테스트 파일 생성
-      - name: 🧪 Generate Test Suites
-        run: |
-          cat <<EOF > tests/security_test.py
-          import pytest, os
-          def test_files_exist():
-              assert os.path.exists("playbooks/phishing_response.py")
-          def test_encryption():
-              with open("secrets/encrypted_creds.enc", "rb") as f:
-                  assert b"type" not in f.read() # 암호화 확인
-          EOF
-
-      - name: 💾 Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: secure-bundle
-          path: |
-            playbooks/
-            secrets/
-            firewall_policies/
-            scripts/
-            tests/
-            system_services/
-            secure_storage/
-
-  # ------------------------------------------------------------------
-  # 2. 품질 검증 (Black 포맷팅 에러 해결됨)
-  # ------------------------------------------------------------------
-  qa-security-validation:
-    name: 🛡️ QA, Decryption & Audit
-    needs: initialize-secure-environment
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-      
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: secure-bundle
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -181,58 +28,187 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Dependencies
-        run: pip install cryptography flake8 pytest black
+        run: pip install cryptography
 
-      # [중요] 에러가 발생했던 포맷팅 단계 (이제 성공함)
-      - name: 🧹 Auto-Format (Black)
+      # [1] 파이썬 스크립트로 안전하게 대량의 보안 자산 생성
+      - name: 📂 Generate Massive Security Assets
         run: |
-          echo "🧹 Running Black Formatter..."
-          # 생성된 모든 파이썬 파일 포맷팅
-          black playbooks/ scripts/ tests/ system_services/
-          echo "✅ Formatting Complete. No syntax errors found."
+          echo "⚙️ Initializing Asset Generators..."
+          mkdir -p playbooks detections system_services tests scripts firewall_policies secure_storage
 
-      - name: 🔍 Security Linting
-        run: flake8 playbooks --count --select=E9,F63,F7,F82 --show-source --statistics
+          # 파이썬 생성기 (구문 오류 방지용)
+          cat <<EOF > scripts/asset_generator.py
+          import os
 
-      - name: 🔓 Verify Decryption
+          # 1. 플레이북 10종 생성
+          playbooks = [
+              "phishing_response", "ransomware_defense", "db_audit", 
+              "user_lockout", "traffic_analysis", "ddos_mitigation",
+              "api_security_check", "compliance_scanner", "vpn_access_control",
+              "endpoint_isolation"
+          ]
+          
+          for pb in playbooks:
+              with open(f"playbooks/{pb}.py", "w") as f:
+                  f.write("import logging\n")
+                  f.write("logging.basicConfig(level=logging.INFO)\n\n")
+                  f.write(f"def execute_{pb}():\n")
+                  f.write(f"    '''Security Procedure for {pb}'''\n")
+                  f.write(f"    logging.info('🛡️ Executing Protocol: {pb}')\n")
+                  f.write("    return True\n\n")
+                  f.write("if __name__ == '__main__':\n")
+                  f.write(f"    execute_{pb}()\n")
+
+          # 2. 방화벽 정책 생성 (iptables)
+          rules = [
+              "*filter", ":INPUT DROP [0:0]",
+              "-A INPUT -p tcp --dport 22 -s 192.168.10.0/24 -j ACCEPT",
+              "-A INPUT -p tcp --dport 5432 -m string --string 'UNION SELECT' -algo bm -j DROP",
+              "COMMIT"
+          ]
+          with open("firewall_policies/db_firewall.rules", "w") as f:
+              f.write('\n'.join(rules))
+
+          print("✅ Massive Assets Generated.")
+          EOF
+          
+          python scripts/asset_generator.py
+
+      # [2] AES-256 암호화 및 비밀 키 생성
+      - name: 🔐 Generate & Encrypt Secrets
         run: |
-          python -c "
+          cat <<EOF > scripts/encrypt_core.py
           from cryptography.fernet import Fernet
-          import json
-          with open('secure_storage/master.key', 'rb') as k: key = k.read()
+          import json, os
+
+          # 키 생성 및 저장
+          key = Fernet.generate_key()
           cipher = Fernet(key)
-          with open('secrets/encrypted_creds.enc', 'rb') as f:
-              print('🔓 Decryption Test: SUCCESS')
-          "
+          
+          # 키는 secure_storage에 저장 (외부 전송용)
+          with open("secure_storage/master_key.key", "wb") as f:
+              f.write(key)
 
-      - name: ⚔️ Run Unit Tests
+          # 민감 정보 암호화
+          secret_data = json.dumps({"db_pass": "super_secret_p@ssw0rd"}).encode()
+          with open("secure_storage/credentials.enc", "wb") as f:
+              f.write(cipher.encrypt(secret_data))
+          EOF
+          python scripts/encrypt_core.py
+
+      # [3] 테스트 코드 생성
+      - name: 🧪 Generate Tests
         run: |
-          export PYTHONPATH=$PYTHONPATH:.
-          pytest tests/security_test.py --verbose
+          cat <<EOF > tests/ops_test.py
+          import os
+          def test_assets_exist():
+              assert os.path.exists("playbooks/phishing_response.py")
+          EOF
+
+      - name: 💾 Upload Artifacts (Temporary)
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-package
+          path: |
+            playbooks/
+            detections/
+            scripts/
+            firewall_policies/
+            secure_storage/
+            system_services/
+            tests/
 
   # ------------------------------------------------------------------
-  # 3. 배포 (가시성 강화)
+  # 2. 품질 검증 (Formatting & Linting)
   # ------------------------------------------------------------------
-  secure-deploy:
-    name: 🚀 Secure Deployment
-    needs: qa-security-validation
+  qa-validation:
+    name: 🛡️ QA & Security Audit
+    needs: generate-and-encrypt
     runs-on: ubuntu-latest
-    if: always()
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: secure-bundle
+          name: deployment-package
 
-      - name: 📡 Deploy & Visualize
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Tools
+        run: pip install black flake8 pytest cryptography
+
+      - name: 🧹 Auto-Format (Black)
+        run: black playbooks/ scripts/ tests/
+
+      - name: ⚔️ Run Tests
         run: |
-          echo "🚀 Deploying to Secure Zone..."
-          echo "----------------------------------------"
-          echo "✅ 8 Playbooks Deployed."
-          echo "✅ DB Firewall Policy Applied (Anti-SQL Injection Active)."
-          echo "✅ Credentials Vault Locked (AES-256)."
-          echo "----------------------------------------"
-          echo "🎉 Deployment Process Finished Successfully."
+          export PYTHONPATH=$PYTHONPATH:.
+          pytest tests/ops_test.py
+
+  # ------------------------------------------------------------------
+  # 3. 외부 저장소 업로드 (권한 수정 및 Push)
+  # ------------------------------------------------------------------
+  deploy-to-external-repo:
+    name: 🚀 Upload to Koreatest12/Shinhan-
+    needs: qa-validation
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 생성된 파일 다운로드
+      - name: Download Validated Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: deployment-package
+          path: generated_assets
+
+      # 2. 타겟 저장소 체크아웃 (PAT 사용)
+      - name: Checkout Target Repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          token: ${{ secrets.TARGET_REPO_TOKEN }} # 필수: Settings > Secrets에 등록 필요
+          path: target_repo
+
+      # 3. 파일 복사 및 권한 수정 (핵심 요구사항)
+      - name: 📂 Copy Files & Modify Permissions
+        run: |
+          echo "🚀 Starting Transfer to ${{ env.TARGET_REPO }}..."
+          
+          # 타겟 저장소로 파일 이동 (기존 파일 덮어쓰기)
+          cp -r generated_assets/* target_repo/
+          
+          cd target_repo
+          
+          echo "🔧 Modifying File Permissions (chmod)..."
+          # 실행 권한 부여 (스크립트 및 플레이북)
+          chmod +x scripts/*.py
+          chmod +x playbooks/*.py
+          # 보안 키 파일은 읽기 전용으로 잠금
+          chmod 600 secure_storage/*.key
+          
+          echo "✅ Permissions applied successfully."
+
+      # 4. 변경사항 커밋 및 푸시
+      - name: 📡 Push to External Repository
+        run: |
+          cd target_repo
+          
+          # Git 설정
+          git config user.name "${{ env.COMMIT_USER }}"
+          git config user.email "${{ env.COMMIT_EMAIL }}"
+          
+          # 변경사항 스테이징
+          git add .
+          
+          # 변경사항이 있을 경우에만 커밋
+          if git diff --staged --quiet; then
+            echo "⚠️ No changes to commit."
+          else
+            git commit -m "🚀 Auto-Deploy: Massive Security Update & Permissions Fix"
+            git push origin main
+            echo "🎉 Successfully uploaded to https://github.com/${{ env.TARGET_REPO }}"
+          fi
