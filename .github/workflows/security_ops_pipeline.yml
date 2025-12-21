@@ -1,4 +1,4 @@
-name: Deploy to External Repo (Massive Update)
+name: Fixed External Deploy Pipeline
 
 on:
   push:
@@ -151,64 +151,82 @@ jobs:
           pytest tests/ops_test.py
 
   # ------------------------------------------------------------------
-  # 3. 외부 저장소 업로드 (권한 수정 및 Push)
+  # 3. 외부 저장소 업로드 (에러 수정됨)
   # ------------------------------------------------------------------
   deploy-to-external-repo:
     name: 🚀 Upload to Koreatest12/Shinhan-
     needs: qa-validation
     runs-on: ubuntu-latest
     steps:
-      # 1. 생성된 파일 다운로드
+      # 1. Secrets 확인 (디버깅용)
+      - name: 🔍 Check Secret Availability
+        run: |
+          if [ -z "${{ secrets.TARGET_REPO_TOKEN }}" ]; then
+            echo "❌ CRITICAL ERROR: 'TARGET_REPO_TOKEN' secret is missing."
+            echo "Please add it in Settings > Secrets and variables > Actions."
+            exit 1
+          else
+            echo "✅ 'TARGET_REPO_TOKEN' is found. Proceeding..."
+          fi
+
+      # 2. 생성된 파일 다운로드
       - name: Download Validated Artifacts
         uses: actions/download-artifact@v4
         with:
           name: deployment-package
           path: generated_assets
 
-      # 2. 타겟 저장소 체크아웃 (PAT 사용)
+      # 3. 타겟 저장소 체크아웃 (인증 방식 개선)
       - name: Checkout Target Repository
         uses: actions/checkout@v4
         with:
           repository: ${{ env.TARGET_REPO }}
-          token: ${{ secrets.TARGET_REPO_TOKEN }} # 필수: Settings > Secrets에 등록 필요
+          # 중요: 토큰이 명확하게 전달되어야 함
+          token: ${{ secrets.TARGET_REPO_TOKEN }}
           path: target_repo
+          # 중요: 기존 자격 증명 지속 방지 (충돌 방지)
+          persist-credentials: false
 
-      # 3. 파일 복사 및 권한 수정 (핵심 요구사항)
+      # 4. 파일 복사 및 권한 수정
       - name: 📂 Copy Files & Modify Permissions
         run: |
-          echo "🚀 Starting Transfer to ${{ env.TARGET_REPO }}..."
-          
-          # 타겟 저장소로 파일 이동 (기존 파일 덮어쓰기)
+          echo "🚀 Copying new assets to target repository..."
           cp -r generated_assets/* target_repo/
           
           cd target_repo
           
-          echo "🔧 Modifying File Permissions (chmod)..."
-          # 실행 권한 부여 (스크립트 및 플레이북)
+          echo "🔧 Setting File Permissions..."
+          # 실행 권한 부여
           chmod +x scripts/*.py
           chmod +x playbooks/*.py
-          # 보안 키 파일은 읽기 전용으로 잠금
+          # 보안 키 파일 잠금
           chmod 600 secure_storage/*.key
           
-          echo "✅ Permissions applied successfully."
+          echo "✅ Permissions updated."
 
-      # 4. 변경사항 커밋 및 푸시
+      # 5. 강제 인증 푸시 (에러 해결의 핵심)
       - name: 📡 Push to External Repository
         run: |
           cd target_repo
           
-          # Git 설정
+          # Git 사용자 설정
           git config user.name "${{ env.COMMIT_USER }}"
           git config user.email "${{ env.COMMIT_EMAIL }}"
           
-          # 변경사항 스테이징
+          # 변경사항 추가
           git add .
           
-          # 변경사항이 있을 경우에만 커밋
+          # 커밋 및 푸시
           if git diff --staged --quiet; then
             echo "⚠️ No changes to commit."
           else
+            echo "🔄 Committing changes..."
             git commit -m "🚀 Auto-Deploy: Massive Security Update & Permissions Fix"
+            
+            echo "📡 Pushing to remote..."
+            # [핵심] Remote URL에 토큰을 직접 포함시켜 인증 오류 원천 차단
+            git remote set-url origin https://x-access-token:${{ secrets.TARGET_REPO_TOKEN }}@github.com/${{ env.TARGET_REPO }}.git
             git push origin main
+            
             echo "🎉 Successfully uploaded to https://github.com/${{ env.TARGET_REPO }}"
           fi
