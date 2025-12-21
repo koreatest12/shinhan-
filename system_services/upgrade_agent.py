@@ -1,0 +1,1 @@
+def upgrade(): print('Upgrading...')

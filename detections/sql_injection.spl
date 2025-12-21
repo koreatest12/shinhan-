@@ -1,0 +1,1 @@
+index=web_logs method=POST | regex uri="(?i)UNION SELECT" | table src_ip uri

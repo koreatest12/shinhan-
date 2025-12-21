@@ -1,0 +1,1 @@
+def check_status(): return 'OK'

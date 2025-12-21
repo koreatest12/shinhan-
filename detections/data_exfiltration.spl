@@ -1,0 +1,1 @@
+index=firewall direction=outbound | stats sum(bytes) as total by dest_ip | where total > 10GB

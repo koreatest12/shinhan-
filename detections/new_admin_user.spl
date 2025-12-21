@@ -1,0 +1,1 @@
+index=ad_logs EventCode=4720 | table _time, user, src_user

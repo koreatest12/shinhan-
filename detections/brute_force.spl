@@ -1,0 +1,1 @@
+index=auth action=failure | stats count by src_ip | where count > 100
