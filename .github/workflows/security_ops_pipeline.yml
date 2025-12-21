@@ -182,7 +182,7 @@ jobs:
           flake8 playbooks --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
       - name: 🔒 Security Scan (Bandit)
-        run: bandit -r playbooks/ -f custom --msg-template "{severity}: {message}"
+        run: bandit -r playbooks/ -f custom --msg-template "{severity}:{message}"
 
       - name: 📜 Jinja2 Template Check
         run: |
