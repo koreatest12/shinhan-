@@ -1,4 +1,4 @@
-name: Auto-Upload to Repository (No Manual Token)
+name: Fixed Massive Security Ops Pipeline
 
 on:
   push:
@@ -7,20 +7,19 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
-  # 사용자 정보 자동 설정
-  COMMIT_USER: "GitHub Action Bot"
-  COMMIT_EMAIL: "action@github.com"
+  COMMIT_USER: "Security Ops Bot"
+  COMMIT_EMAIL: "ops@security.internal"
 
-# [핵심] 권한 자동 부여 설정 (이 부분이 토큰 생성을 대체함)
+# [핵심] 토큰 없이 업로드 가능하도록 권한 자동 부여
 permissions:
   contents: write
 
 jobs:
   # ------------------------------------------------------------------
-  # 1. 자산 생성 (암호화, 플레이북, 방화벽 정책 등 대량 생성)
+  # 1. 자산 생성 (에러 방지를 위해 모든 폴더에 파일 채워넣기)
   # ------------------------------------------------------------------
-  generate-and-encrypt:
-    name: 🏗️ Generate & Prepare Assets
+  generate-assets:
+    name: 🏗️ Generate Massive Assets
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -34,69 +33,96 @@ jobs:
       - name: Install Dependencies
         run: pip install cryptography
 
-      # [1] 파이썬 스크립트로 안전하게 대량의 보안 자산 생성
-      - name: 📂 Generate Massive Security Assets
+      - name: 📂 Generate All Security Files (Python Generator)
         run: |
-          echo "⚙️ Generating Security Assets..."
-          mkdir -p playbooks detections tests scripts firewall_policies secure_storage
+          echo "⚙️ Initializing Generator..."
+          # 모든 타겟 디렉토리 생성
+          mkdir -p playbooks detections system_services tests scripts firewall_policies secure_storage reports
 
-          # 플레이북 대량 생성기
-          cat <<EOF > scripts/asset_generator.py
+          # 파이썬 생성 스크립트 작성 (구문 오류 방지 및 파일 내용 채우기)
+          cat <<EOF > scripts/full_generator.py
           import os
 
+          # 1. Playbooks (Python) - 10종 생성
           playbooks = [
-              "phishing_response", "ransomware_defense", "db_audit", 
-              "user_lockout", "traffic_analysis", "ddos_mitigation",
-              "api_security_check", "compliance_scanner", "vpn_access_control",
-              "endpoint_isolation"
+              "phishing_response", "ransomware_defense", "db_integrity_check", 
+              "user_account_lockout", "network_traffic_analysis", "ddos_mitigation",
+              "api_vulnerability_scan", "compliance_audit_log", "vpn_access_control",
+              "endpoint_isolation_procedure"
           ]
-          
           for pb in playbooks:
               with open(f"playbooks/{pb}.py", "w") as f:
                   f.write("import logging\n")
                   f.write("logging.basicConfig(level=logging.INFO)\n\n")
                   f.write(f"def execute_{pb}():\n")
-                  f.write(f"    logging.info('🛡️ Executing Protocol: {pb}')\n")
-                  f.write("    return True\n\n")
+                  f.write(f"    '''Auto-generated playbook for {pb}'''\n")
+                  f.write(f"    logging.info('🛡️ Running Security Protocol: {pb}')\n")
+                  f.write("    return 'SUCCESS'\n\n")
                   f.write("if __name__ == '__main__':\n")
                   f.write(f"    execute_{pb}()\n")
 
-          # 방화벽 규칙 생성
-          with open("firewall_policies/db_firewall.rules", "w") as f:
-              f.write("*filter\n:INPUT DROP [0:0]\n-A INPUT -p tcp --dport 5432 -j ACCEPT\nCOMMIT")
+          # 2. Detections (SPL - Splunk) - 빈 폴더 에러 방지용 파일 생성
+          detections = {
+              "brute_force.spl": "index=auth action=failure | stats count by src_ip | where count > 100",
+              "sql_injection.spl": "index=web_logs method=POST | regex uri=\"(?i)UNION SELECT\" | table src_ip uri",
+              "data_exfiltration.spl": "index=firewall direction=outbound | stats sum(bytes) as total by dest_ip | where total > 10GB",
+              "ransomware_ext.spl": "index=endpoint action=write | regex file_name=\".*\.(enc|lock|crypted)$\"",
+              "new_admin_user.spl": "index=ad_logs EventCode=4720 | table _time, user, src_user"
+          }
+          for filename, content in detections.items():
+              with open(f"detections/{filename}", "w") as f:
+                  f.write(content)
+
+          # 3. System Services
+          with open("system_services/health_check.py", "w") as f:
+              f.write("def check_status(): return 'OK'")
+          
+          with open("system_services/upgrade_agent.py", "w") as f:
+              f.write("def upgrade(): print('Upgrading...')")
+
+          # 4. Firewall Policies
+          with open("firewall_policies/global_deny.rules", "w") as f:
+              f.write("*filter\n:INPUT DROP [0:0]\n-A INPUT -p tcp --dport 443 -j ACCEPT\nCOMMIT")
+
+          # 5. Reports (HTML)
+          with open("reports/security_summary.html", "w") as f:
+              f.write("<html><body><h1>Daily Security Report</h1><p>Status: Green</p></body></html>")
+
+          print("✅ Massive Assets Generated Successfully.")
           EOF
           
-          python scripts/asset_generator.py
+          # 생성기 실행
+          python scripts/full_generator.py
 
-      # [2] AES-256 암호화 (보안 키 생성)
-      - name: 🔐 Generate Secrets
+      - name: 🔐 Generate Encryption Keys
         run: |
-          cat <<EOF > scripts/encrypt_core.py
+          cat <<EOF > scripts/gen_keys.py
           from cryptography.fernet import Fernet
           key = Fernet.generate_key()
-          with open("secure_storage/master_key.key", "wb") as f:
+          with open("secure_storage/master_access.key", "wb") as f:
               f.write(key)
           EOF
-          python scripts/encrypt_core.py
+          python scripts/gen_keys.py
 
-      # [3] 아티팩트 업로드 (다음 단계로 전달)
       - name: 💾 Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: deployment-package
+          name: massive-update-package
           path: |
             playbooks/
             detections/
-            scripts/
+            system_services/
             firewall_policies/
             secure_storage/
+            reports/
+            scripts/
 
   # ------------------------------------------------------------------
-  # 2. 품질 검증 (Formatting)
+  # 2. QA (Formatting)
   # ------------------------------------------------------------------
-  qa-validation:
-    name: 🛡️ QA Check
-    needs: generate-and-encrypt
+  quality-control:
+    name: 🛡️ Code Quality Check
+    needs: generate-assets
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -104,7 +130,7 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: deployment-package
+          name: massive-update-package
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -112,60 +138,68 @@ jobs:
       - name: Install Black
         run: pip install black
       - name: 🧹 Auto-Format
-        run: black playbooks/ scripts/
+        run: black playbooks/ scripts/ system_services/
 
   # ------------------------------------------------------------------
-  # 3. 저장소 업로드 (권한 자동화 적용)
+  # 3. 저장소 업로드 (에러 수정됨)
   # ------------------------------------------------------------------
   upload-to-repo:
-    name: 🚀 Push to Repository (No Token Needed)
-    needs: qa-validation
+    name: 🚀 Push Massive Update
+    needs: quality-control
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          # 기본 GITHUB_TOKEN 사용 (설정에서 권한만 주면 됨)
+          # 토큰 없이 기본 권한 사용
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Download Generated Assets
+      - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: deployment-package
+          name: massive-update-package
           path: generated_assets
 
-      - name: 📂 Move & Organize Files
+      - name: 📂 Move Files & Set Permissions
         run: |
-          echo "🚀 Preparing files for upload..."
+          echo "🚀 Applying Massive Updates..."
           
-          # 기존 파일 덮어쓰기 및 이동
+          # 생성된 모든 폴더를 현재 디렉토리로 이동 (덮어쓰기)
           cp -r generated_assets/* .
           
-          # 파일 권한 수정 (요청사항 반영)
+          # 권한 대량 수정
+          echo "🔧 Setting Execution Permissions..."
           chmod +x scripts/*.py
           chmod +x playbooks/*.py
+          chmod +x system_services/*.py
           chmod 600 secure_storage/*.key
           
           # 임시 폴더 삭제
           rm -rf generated_assets
+          
+          # 파일 생성 확인 (디버깅용)
+          echo "📂 Verifying Detections Folder Content:"
+          ls -F detections/
 
-      - name: 📡 Push Changes to Repo
+      - name: 📡 Git Commit & Push
         run: |
-          # 1. Git 사용자 설정
+          # 1. 사용자 설정
           git config user.name "${{ env.COMMIT_USER }}"
           git config user.email "${{ env.COMMIT_EMAIL }}"
           
-          # 2. 변경사항 스테이징
-          git add playbooks/ detections/ scripts/ firewall_policies/ secure_storage/
+          # 2. 파일 스테이징 (에러 수정의 핵심: '.' 사용)
+          # 특정 폴더를 지정하지 않고, 현재 경로의 모든 변경사항을 추가합니다.
+          # 이렇게 하면 폴더 이름이 달라도 에러가 나지 않습니다.
+          git add .
           
-          # 3. 커밋 및 푸시 (GITHUB_TOKEN 자동 사용)
+          # 3. 커밋 및 푸시
           if git diff --staged --quiet; then
-            echo "⚠️ No changes detected."
+            echo "⚠️ No changes to commit. Everything is up to date."
           else
-            echo "🔄 Committing changes..."
-            git commit -m "🚀 Auto-Generated Security Assets [Automated Push]"
+            echo "🔄 Committing Massive Security Update..."
+            git commit -m "🚀 Massive Update: 10 Playbooks, 5 Detections, Reports & System Services"
             
             echo "📡 Pushing to repository..."
             git push origin main
-            echo "✅ Successfully uploaded without manual token!"
+            echo "✅ Successfully uploaded!"
           fi
