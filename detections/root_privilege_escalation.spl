@@ -1,0 +1,1 @@
+index=audit command="sudo su" OR command="uid=0"

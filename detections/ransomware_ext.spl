@@ -1,1 +1,1 @@
-index=endpoint action=write | regex file_name=".*\.(enc|lock|crypted)$"
+index=endpoint action=write file_name="*.crypt"

@@ -1,11 +1,11 @@
 import os
 
-# 1. Playbooks (Python) - 10종 생성
+# 1. Playbooks (12종 - SSH, VPN 기능 포함)
 playbooks = [
     "phishing_response", "ransomware_defense", "db_integrity_check", 
     "user_account_lockout", "network_traffic_analysis", "ddos_mitigation",
     "api_vulnerability_scan", "compliance_audit_log", "vpn_access_control",
-    "endpoint_isolation_procedure"
+    "ssh_session_monitor", "endpoint_isolation_procedure", "cloud_iam_audit"
 ]
 for pb in playbooks:
     with open(f"playbooks/{pb}.py", "w") as f:
@@ -18,31 +18,28 @@ for pb in playbooks:
         f.write("if __name__ == '__main__':\n")
         f.write(f"    execute_{pb}()\n")
 
-# 2. Detections (SPL - Splunk) - 빈 폴더 에러 방지용 파일 생성
+# 2. Detections (Splunk SPL 6종)
 detections = {
-    "brute_force.spl": "index=auth action=failure | stats count by src_ip | where count > 100",
+    "ssh_brute_force.spl": "index=linux_secure process=sshd 'Failed password' | stats count by src_ip > 10",
+    "vpn_unusual_login.spl": "index=vpn_logs action=login status=success src_country!=KR | alert",
     "sql_injection.spl": "index=web_logs method=POST | regex uri=\"(?i)UNION SELECT\" | table src_ip uri",
-    "data_exfiltration.spl": "index=firewall direction=outbound | stats sum(bytes) as total by dest_ip | where total > 10GB",
-    "ransomware_ext.spl": "index=endpoint action=write | regex file_name=\".*\.(enc|lock|crypted)$\"",
-    "new_admin_user.spl": "index=ad_logs EventCode=4720 | table _time, user, src_user"
+    "data_exfiltration.spl": "index=firewall direction=outbound | stats sum(bytes) > 5GB",
+    "ransomware_ext.spl": "index=endpoint action=write file_name=\"*.crypt\"",
+    "root_privilege_escalation.spl": "index=audit command=\"sudo su\" OR command=\"uid=0\""
 }
 for filename, content in detections.items():
     with open(f"detections/{filename}", "w") as f:
         f.write(content)
 
-# 3. System Services
-with open("system_services/health_check.py", "w") as f:
-    f.write("def check_status(): return 'OK'")
+# 3. System Services (VPN/SSH Manager)
+with open("system_services/vpn_manager.py", "w") as f:
+    f.write("def connect_vpn(): print('Connecting to Corporate VPN...')")
 
-with open("system_services/upgrade_agent.py", "w") as f:
-    f.write("def upgrade(): print('Upgrading...')")
+with open("system_services/ssh_tunnel.py", "w") as f:
+    f.write("def establish_tunnel(): print('Establishing Secure SSH Tunnel...')")
 
-# 4. Firewall Policies
-with open("firewall_policies/global_deny.rules", "w") as f:
-    f.write("*filter\n:INPUT DROP [0:0]\n-A INPUT -p tcp --dport 443 -j ACCEPT\nCOMMIT")
+# 4. Reports (HTML)
+with open("reports/security_dashboard.html", "w") as f:
+    f.write("<html><body><h1>Security Ops Dashboard</h1><p>VPN Status: Active</p><p>SSH Status: Secure</p></body></html>")
 
-# 5. Reports (HTML)
-with open("reports/security_summary.html", "w") as f:
-    f.write("<html><body><h1>Daily Security Report</h1><p>Status: Green</p></body></html>")
-
-print("✅ Massive Assets Generated Successfully.")
+print("✅ Massive Assets Generated (Including VPN/SSH modules).")

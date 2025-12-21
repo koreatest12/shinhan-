@@ -1,0 +1,1 @@
+index=vpn_logs action=login status=success src_country!=KR | alert

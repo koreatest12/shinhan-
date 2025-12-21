@@ -1,0 +1,1 @@
+def connect_vpn(): print('Connecting to Corporate VPN...')

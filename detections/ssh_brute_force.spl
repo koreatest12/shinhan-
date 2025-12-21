@@ -1,0 +1,1 @@
+index=linux_secure process=sshd 'Failed password' | stats count by src_ip > 10

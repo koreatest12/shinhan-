@@ -1,0 +1,5 @@
+Host prod-server
+    HostName 10.10.10.50
+    User admin
+    IdentityFile ~/.ssh/official_key.pem
+    StrictHostKeyChecking yes
