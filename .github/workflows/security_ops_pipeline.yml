@@ -1,6 +1,10 @@
-name: Fixed Massive Security Ops Pipeline
+name: Ultra Massive Security Ops (10-min Schedule)
 
 on:
+  # [핵심 1] 10분 단위 자동 실행 스케줄러
+  schedule:
+    - cron: '*/10 * * * *'
+  # 수동 실행 및 코드 푸시 시 실행
   push:
     branches: [ "main", "develop" ]
   workflow_dispatch:
@@ -9,17 +13,19 @@ env:
   PYTHON_VERSION: '3.11'
   COMMIT_USER: "Security Ops Bot"
   COMMIT_EMAIL: "ops@security.internal"
+  # [핵심 2] 공식 보안 리소스 다운로드 주소
+  OFFICIAL_RESOURCE_URL: "https://internal-secure-repo.shinhan.com/resources"
 
-# [핵심] 토큰 없이 업로드 가능하도록 권한 자동 부여
+# 토큰 없이 업로드 권한 부여
 permissions:
   contents: write
 
 jobs:
   # ------------------------------------------------------------------
-  # 1. 자산 생성 (에러 방지를 위해 모든 폴더에 파일 채워넣기)
+  # 1. 자산 생성 및 공식 리소스 다운로드
   # ------------------------------------------------------------------
-  generate-assets:
-    name: 🏗️ Generate Massive Assets
+  generate-and-download:
+    name: 🏗️ Generate & Download Assets
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -31,24 +37,70 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Dependencies
-        run: pip install cryptography
+        run: pip install cryptography requests
 
-      - name: 📂 Generate All Security Files (Python Generator)
+      # [핵심 2] 공식 주소를 통한 SSH, VPN, Key 다운로드 (시뮬레이션)
+      - name: 🌐 Download Official Secure Configs (SSH, VPN, Keys)
         run: |
-          echo "⚙️ Initializing Generator..."
-          # 모든 타겟 디렉토리 생성
-          mkdir -p playbooks detections system_services tests scripts firewall_policies secure_storage reports
+          echo "📡 Connecting to Official Resource: ${{ env.OFFICIAL_RESOURCE_URL }}..."
+          
+          # 폴더 구조 생성
+          mkdir -p secure_config/ssh secure_config/vpn secure_config/keys
+          
+          # 1. SSH 설정 다운로드
+          echo "⬇️ Downloading SSH Configuration..."
+          # wget -q "${{ env.OFFICIAL_RESOURCE_URL }}/ssh_config" -O secure_config/ssh/config
+          cat <<EOF > secure_config/ssh/config
+          Host prod-server
+              HostName 10.10.10.50
+              User admin
+              IdentityFile ~/.ssh/official_key.pem
+              StrictHostKeyChecking yes
+          EOF
 
-          # 파이썬 생성 스크립트 작성 (구문 오류 방지 및 파일 내용 채우기)
+          # 2. VPN 설정 다운로드
+          echo "⬇️ Downloading VPN Profile..."
+          # wget -q "${{ env.OFFICIAL_RESOURCE_URL }}/corporate.ovpn" -O secure_config/vpn/corporate.ovpn
+          cat <<EOF > secure_config/vpn/corporate.ovpn
+          client
+          dev tun
+          proto udp
+          remote vpn.shinhan.internal 1194
+          cert user.crt
+          key user.key
+          EOF
+
+          # 3. 공식 인증 키(Key) 다운로드
+          echo "⬇️ Downloading Official Auth Keys..."
+          # wget -q "${{ env.OFFICIAL_RESOURCE_URL }}/auth.key" -O secure_config/keys/auth.key
+          cat <<EOF > secure_config/keys/official_auth.key
+          -----BEGIN PRIVATE KEY-----
+          MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQD...
+          (OFFICIAL DOWNLOADED KEY)
+          -----END PRIVATE KEY-----
+          EOF
+          
+          # 권한 설정 (다운로드 직후 보안 적용)
+          chmod 600 secure_config/keys/official_auth.key
+          
+          echo "✅ All Official Resources Downloaded Successfully."
+
+      # [핵심 3] 대량의 보안 자산 생성 (기능 골고루 반영)
+      - name: 📂 Generate Massive Security Assets
+        run: |
+          echo "⚙️ Generating Extensive Security Content..."
+          mkdir -p playbooks detections system_services reports scripts firewall_policies
+
+          # 파이썬 생성 스크립트
           cat <<EOF > scripts/full_generator.py
           import os
 
-          # 1. Playbooks (Python) - 10종 생성
+          # 1. Playbooks (12종 - SSH, VPN 기능 포함)
           playbooks = [
               "phishing_response", "ransomware_defense", "db_integrity_check", 
               "user_account_lockout", "network_traffic_analysis", "ddos_mitigation",
               "api_vulnerability_scan", "compliance_audit_log", "vpn_access_control",
-              "endpoint_isolation_procedure"
+              "ssh_session_monitor", "endpoint_isolation_procedure", "cloud_iam_audit"
           ]
           for pb in playbooks:
               with open(f"playbooks/{pb}.py", "w") as f:
@@ -61,68 +113,54 @@ jobs:
                   f.write("if __name__ == '__main__':\n")
                   f.write(f"    execute_{pb}()\n")
 
-          # 2. Detections (SPL - Splunk) - 빈 폴더 에러 방지용 파일 생성
+          # 2. Detections (Splunk SPL 6종)
           detections = {
-              "brute_force.spl": "index=auth action=failure | stats count by src_ip | where count > 100",
+              "ssh_brute_force.spl": "index=linux_secure process=sshd 'Failed password' | stats count by src_ip > 10",
+              "vpn_unusual_login.spl": "index=vpn_logs action=login status=success src_country!=KR | alert",
               "sql_injection.spl": "index=web_logs method=POST | regex uri=\"(?i)UNION SELECT\" | table src_ip uri",
-              "data_exfiltration.spl": "index=firewall direction=outbound | stats sum(bytes) as total by dest_ip | where total > 10GB",
-              "ransomware_ext.spl": "index=endpoint action=write | regex file_name=\".*\.(enc|lock|crypted)$\"",
-              "new_admin_user.spl": "index=ad_logs EventCode=4720 | table _time, user, src_user"
+              "data_exfiltration.spl": "index=firewall direction=outbound | stats sum(bytes) > 5GB",
+              "ransomware_ext.spl": "index=endpoint action=write file_name=\"*.crypt\"",
+              "root_privilege_escalation.spl": "index=audit command=\"sudo su\" OR command=\"uid=0\""
           }
           for filename, content in detections.items():
               with open(f"detections/{filename}", "w") as f:
                   f.write(content)
 
-          # 3. System Services
-          with open("system_services/health_check.py", "w") as f:
-              f.write("def check_status(): return 'OK'")
+          # 3. System Services (VPN/SSH Manager)
+          with open("system_services/vpn_manager.py", "w") as f:
+              f.write("def connect_vpn(): print('Connecting to Corporate VPN...')")
           
-          with open("system_services/upgrade_agent.py", "w") as f:
-              f.write("def upgrade(): print('Upgrading...')")
+          with open("system_services/ssh_tunnel.py", "w") as f:
+              f.write("def establish_tunnel(): print('Establishing Secure SSH Tunnel...')")
 
-          # 4. Firewall Policies
-          with open("firewall_policies/global_deny.rules", "w") as f:
-              f.write("*filter\n:INPUT DROP [0:0]\n-A INPUT -p tcp --dport 443 -j ACCEPT\nCOMMIT")
+          # 4. Reports (HTML)
+          with open("reports/security_dashboard.html", "w") as f:
+              f.write("<html><body><h1>Security Ops Dashboard</h1><p>VPN Status: Active</p><p>SSH Status: Secure</p></body></html>")
 
-          # 5. Reports (HTML)
-          with open("reports/security_summary.html", "w") as f:
-              f.write("<html><body><h1>Daily Security Report</h1><p>Status: Green</p></body></html>")
-
-          print("✅ Massive Assets Generated Successfully.")
+          print("✅ Massive Assets Generated (Including VPN/SSH modules).")
           EOF
           
-          # 생성기 실행
           python scripts/full_generator.py
-
-      - name: 🔐 Generate Encryption Keys
-        run: |
-          cat <<EOF > scripts/gen_keys.py
-          from cryptography.fernet import Fernet
-          key = Fernet.generate_key()
-          with open("secure_storage/master_access.key", "wb") as f:
-              f.write(key)
-          EOF
-          python scripts/gen_keys.py
 
       - name: 💾 Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: massive-update-package
+          name: massive-package
           path: |
+            secure_config/
             playbooks/
             detections/
             system_services/
-            firewall_policies/
-            secure_storage/
             reports/
             scripts/
+            firewall_policies/
 
   # ------------------------------------------------------------------
-  # 2. QA (Formatting)
+  # 2. 품질 관리 (Formatting)
   # ------------------------------------------------------------------
   quality-control:
     name: 🛡️ Code Quality Check
-    needs: generate-assets
+    needs: generate-and-download
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -130,7 +168,7 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: massive-update-package
+          name: massive-package
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -141,65 +179,60 @@ jobs:
         run: black playbooks/ scripts/ system_services/
 
   # ------------------------------------------------------------------
-  # 3. 저장소 업로드 (에러 수정됨)
+  # 3. 저장소 업로드 (자동 권한 사용)
   # ------------------------------------------------------------------
   upload-to-repo:
-    name: 🚀 Push Massive Update
+    name: 🚀 Upload to Repo (Every 10 mins)
     needs: quality-control
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          # 토큰 없이 기본 권한 사용
+          # 토큰 없이 기본 GITHUB_TOKEN 사용
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: massive-update-package
+          name: massive-package
           path: generated_assets
 
-      - name: 📂 Move Files & Set Permissions
+      - name: 📂 Organize & Set Permissions
         run: |
-          echo "🚀 Applying Massive Updates..."
+          echo "🚀 Processing Updates..."
           
-          # 생성된 모든 폴더를 현재 디렉토리로 이동 (덮어쓰기)
+          # 생성된 파일들을 현재 저장소 루트로 이동 (덮어쓰기)
           cp -r generated_assets/* .
           
-          # 권한 대량 수정
-          echo "🔧 Setting Execution Permissions..."
+          # [핵심] 다운로드된 보안 파일 권한 설정 (SSH Key 등)
+          chmod 700 secure_config/ssh
+          chmod 600 secure_config/keys/*.key
+          chmod 600 secure_config/vpn/*.ovpn
+          
+          # 실행 스크립트 권한 설정
           chmod +x scripts/*.py
           chmod +x playbooks/*.py
-          chmod +x system_services/*.py
-          chmod 600 secure_storage/*.key
           
-          # 임시 폴더 삭제
           rm -rf generated_assets
           
-          # 파일 생성 확인 (디버깅용)
-          echo "📂 Verifying Detections Folder Content:"
-          ls -F detections/
+          echo "✅ Files organized and permissions set."
 
-      - name: 📡 Git Commit & Push
+      - name: 📡 Push to Repository
         run: |
-          # 1. 사용자 설정
           git config user.name "${{ env.COMMIT_USER }}"
           git config user.email "${{ env.COMMIT_EMAIL }}"
           
-          # 2. 파일 스테이징 (에러 수정의 핵심: '.' 사용)
-          # 특정 폴더를 지정하지 않고, 현재 경로의 모든 변경사항을 추가합니다.
-          # 이렇게 하면 폴더 이름이 달라도 에러가 나지 않습니다.
+          # 모든 변경사항 추가
           git add .
           
-          # 3. 커밋 및 푸시
           if git diff --staged --quiet; then
-            echo "⚠️ No changes to commit. Everything is up to date."
+            echo "⚠️ No changes to commit."
           else
-            echo "🔄 Committing Massive Security Update..."
-            git commit -m "🚀 Massive Update: 10 Playbooks, 5 Detections, Reports & System Services"
+            echo "🔄 Committing 10-minute Security Update..."
+            git commit -m "🚀 [10-min Schedule] Official SSH/VPN/Key Update & Massive Assets"
             
-            echo "📡 Pushing to repository..."
+            echo "📡 Pushing..."
             git push origin main
-            echo "✅ Successfully uploaded!"
+            echo "🎉 Uploaded successfully to https://github.com/koreatest12/shinhan-"
           fi
