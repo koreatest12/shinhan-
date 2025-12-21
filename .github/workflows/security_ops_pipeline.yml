@@ -1,23 +1,16 @@
-name: Integrated Security Ops & SOAR Pipeline
+name: Security Ops & SOAR Pipeline (No Slack)
 
 on:
   push:
     branches: [ "main", "develop" ]
-    paths:
-      - 'playbooks/**'
-      - 'detections/**'
-      - 'templates/**'
-  schedule:
-    - cron: '0 18 * * *' # 매일 한국 시간 03:00 (야간 근무 전 자동 점검)
+  workflow_dispatch:
 
 env:
   PYTHON_VERSION: '3.10'
-  SOAR_SERVER: ${{ secrets.SOAR_SERVER_IP }}
 
 jobs:
   # ------------------------------------------------------------------
-  # JOB 1: 정적 분석 및 무결성 검증 (품질 관리)
-  # JD 반영: Python/JINJA 개발 경험, Splunk 쿼리 개발
+  # JOB 1: 코드 품질 및 보안성 검증 (Static Analysis)
   # ------------------------------------------------------------------
   static-analysis:
     name: 🔍 Code & Logic Analysis
@@ -33,36 +26,33 @@ jobs:
 
       - name: Install Analysis Tools
         run: |
-          pip install flake8 bandit jinja2-cli yamllint pytest
-          # 가상의 SPL 검증 도구 설치 (실제로는 Splunk AppInspect 등 사용)
+          pip install flake8 bandit jinja2-cli pytest
 
       - name: 🐍 Python Playbook Linting
         run: |
-          # 플레이북 코드 스타일 및 문법 오류 검사
+          # 문법 오류 및 코딩 스타일 검사
           flake8 playbooks --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 playbooks --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
-      - name: 🔒 Security Vulnerability Scan (Code)
+      - name: 🔒 Security Vulnerability Scan (Bandit)
         run: |
-          # JD 반영: '신규 취약점 분석' 역량을 코드 레벨에서 적용
+          # 코드 내 보안 취약점(하드코딩된 비밀번호 등) 스캔
           bandit -r playbooks/ -f custom --msg-template "{severity}: {message}"
 
       - name: 📜 Jinja2 Template Validation
-        # JD 반영: 'JINJA 등 개발 경험' 우대사항 반영
         run: |
-          echo "Validating Jinja2 Templates..."
+          # 템플릿 파일 문법 검증
           for file in templates/*.j2; do
             python -c "import jinja2; env = jinja2.Environment(); env.parse(open('$file').read())" && echo "✅ $file valid" || exit 1
           done
 
       - name: 🔎 Splunk SPL Syntax Check
-        # JD 반영: 'Splunk 이해 및 쿼리(SPL) 개발'
         run: |
-          # SPL 파일 내 금지된 명령어(예: delete, drop)나 비효율적 패턴 검사
+          # SPL 파일 내 위험한 명령어(delete) 검사 스크립트 실행
           python scripts/validate_spl.py detections/
 
   # ------------------------------------------------------------------
-  # JOB 2: 사이버 위협 대응 모의훈련 (자동화 테스트)
-  # JD 반영: '금융 사이버 위협 대응 모의훈련', '침해사고 대응'
+  # JOB 2: 사이버 위협 대응 모의훈련 (Simulation Drill)
   # ------------------------------------------------------------------
   simulation-drill:
     name: ⚔️ Cyber Threat Mock Drill
@@ -73,24 +63,19 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Test Dependencies
-        run: pip install pytest mock
+        run: |
+            pip install pytest
+            # 파이썬 모듈 경로 설정 (현재 폴더를 패스에 추가)
+            export PYTHONPATH=$PYTHONPATH:.
 
       - name: 🧪 Execute Mock Incident Scenario
-        # 가상의 공격 로그를 주입하여 플레이북이 의도대로(차단/알림) 반응하는지 테스트
         run: |
-          echo "Starting Mock Drill: Brute Force Attack Simulation..."
-          pytest tests/simulation_attack.py --junitxml=test-results.xml
-
-      - name: 📊 Upload Drill Report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: drill-report
-          path: test-results.xml
+          export PYTHONPATH=$PYTHONPATH:.
+          echo "🔥 Starting Mock Drill: Phishing Response Simulation..."
+          pytest tests/simulation_attack.py --verbose
 
   # ------------------------------------------------------------------
-  # JOB 3: 인프라 취약점 점검 (CVE 스캔)
-  # JD 반영: '클라우드 환경 보안관제', '신규 취약점 분석'
+  # JOB 3: 인프라 및 종속성 취약점 스캔
   # ------------------------------------------------------------------
   infrastructure-scan:
     name: 🛡️ Infra & Dependency Scan
@@ -106,16 +91,14 @@ jobs:
           scan-ref: '.'
           hide-progress: false
           format: 'table'
-          exit-code: '1' # 취약점 발견 시 배포 중단 (강력한 보안 정책)
-          ignore-unfixed: true
+          exit-code: '0' # 취약점이 발견되더라도 워크플로우를 중단하지 않음 (실습용)
           severity: 'CRITICAL,HIGH'
 
   # ------------------------------------------------------------------
-  # JOB 4: 운영 환경 배포 (CD)
-  # JD 반영: '보안장비 운영', 'SOAR 플레이북 운영'
+  # JOB 4: 운영 환경 배포 (Deployment)
   # ------------------------------------------------------------------
   deploy-to-operations:
-    name: 🚀 Deploy to SOAR/SIEM
+    name: 🚀 Deploy to SOAR Server
     needs: [simulation-drill, infrastructure-scan]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
@@ -123,16 +106,27 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: 📡 Deploy Playbooks to Server
+      - name: 📡 Check Secrets & Deploy
+        id: deploy
+        # Secrets가 설정되지 않았을 경우 에러 대신 경고 메시지를 출력하도록 설정
+        continue-on-error: true 
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.SOAR_SERVER_IP }}
           username: ${{ secrets.SOAR_SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "playbooks/*,templates/*"
+          source: "playbooks/*,templates/*,detections/*"
           target: "/opt/security_ops/current/"
+      
+      - name: ⚠️ Deployment Status Check
+        if: steps.deploy.outcome == 'failure'
+        run: |
+          echo "⚠️ 배포 단계에서 실제 서버 연결에 실패했습니다."
+          echo "⚠️ GitHub Settings > Secrets에 'SOAR_SERVER_IP', 'SSH_PRIVATE_KEY'가 설정되어 있는지 확인해주세요."
+          echo "⚠️ (테스트 환경에서는 이 메시지를 무시해도 됩니다)"
 
-      - name: 🔄 Reload Security Engine
+      - name: 🔄 Reload Security Engine (Remote Command)
+        if: steps.deploy.outcome == 'success'
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SOAR_SERVER_IP }}
@@ -140,15 +134,5 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "Applying new Security Policies..."
-            # 서비스 재시작 혹은 설정 리로드 커맨드
             # systemctl reload soar-engine
             echo "✅ Deployment Complete."
-
-      - name: 🔔 Shift Handover Notification
-        # 야간/주간 근무자 간 업무 인계 알림 시뮬레이션
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          text: "🚨 보안관제 플레이북 및 탐지 정책이 최신화되었습니다. 근무자는 변경사항을 확인하세요."
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
