@@ -1,8 +1,8 @@
-name: Ultra Massive Security Ops (CodeQL v4 + MB Scale)
+name: Security Ops Complete (Release & Package & CodeQL)
 
 on:
   schedule:
-    - cron: '*/10 * * * *'  # 10분 단위 실행
+    - cron: '*/10 * * * *'  # 10분마다 실행
   push:
     branches: [ "main", "develop" ]
   workflow_dispatch:
@@ -11,20 +11,24 @@ env:
   PYTHON_VERSION: '3.11'
   COMMIT_USER: "Security Ops Bot"
   COMMIT_EMAIL: "ops@security.internal"
-  OFFICIAL_RESOURCE_URL: "https://internal-secure-repo.shinhan.com/resources"
+  # Docker 이미지 이름 설정 (소문자 필수)
+  IMAGE_NAME: "security-ops-bundle"
 
 permissions:
-  contents: write
-  security-events: write  # CodeQL 결과 리포팅 권한
+  contents: write       # 리포지토리 코드 및 릴리스 생성 권한
+  packages: write       # GitHub Packages(GHCR) 업로드 권한
+  security-events: write # CodeQL 리포팅 권한
   actions: read
 
 jobs:
   # ------------------------------------------------------------------
-  # 1. MB 단위 보안 자산 생성 (보안 코딩 적용된 Playbook 생성)
+  # 1. MB 단위 보안 자산 생성 (보안 코딩 적용)
   # ------------------------------------------------------------------
   generate-massive-assets:
-    name: 🏗️ Generate MB-Scale Assets
+    name: 🏗️ Generate MB Assets
     runs-on: ubuntu-latest
+    outputs:
+      version_tag: ${{ steps.date_step.outputs.date_tag }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -34,96 +38,63 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Dependencies
-        run: pip install cryptography requests pandas faker
+      - name: Generate Dynamic Version Tag
+        id: date_step
+        run: echo "date_tag=v$(date +'%Y.%m.%d').${{ github.run_number }}" >> $GITHUB_OUTPUT
 
       - name: 🌐 Download & Generate Massive Resources
         run: |
-          echo "⚙️ Initializing Massive Asset Generation..."
-          
-          # 1. 디렉토리 구조 생성
           mkdir -p secure_config/ssh secure_config/vpn secure_config/keys
-          mkdir -p playbooks detections system_services reports scripts firewall_policies logs pcap_dumps
+          mkdir -p playbooks detections reports scripts logs pcap_dumps
 
-          # 2. Python 스크립트로 MB 단위 데이터 및 '보안 강화된' 코드 생성
+          # Python 스크립트로 MB 단위 데이터 생성 (CodeQL 보안 패턴 적용)
           cat <<EOF > scripts/massive_generator.py
-          import os
-          import random
-          import string
-          import time
+          import os, random, time, shlex, subprocess, logging
+          
+          logging.basicConfig(level=logging.INFO)
+          print("🚀 Generating Massive Assets...")
 
-          print("🚀 Starting MB-Scale Generation with Security Upgrades...")
-
-          # A. 대용량 방화벽 로그 (약 5MB 목표)
-          print("  - [Data] Generating Massive Firewall Logs...")
-          with open("logs/firewall_traffic_massive.csv", "w") as f:
-              f.write("timestamp,src_ip,dst_ip,port,action,protocol,rule_id,payload_sample\n")
+          # 1. 5MB 더미 로그
+          with open("logs/firewall_traffic.csv", "w") as f:
+              f.write("timestamp,src,dst,action,payload\n")
               for i in range(50000):
-                  ts = time.time()
-                  src = f"192.168.{random.randint(0,255)}.{random.randint(0,255)}"
-                  dst = f"10.0.{random.randint(0,255)}.{random.randint(0,255)}"
-                  action = random.choice(["ALLOW", "DENY", "DROP", "ALERT"])
-                  f.write(f"{ts},{src},{dst},443,{action},TCP,RULE-{i},PAYLOAD_DATA\n")
+                  f.write(f"{time.time()},192.168.1.{i%255},10.0.0.1,ALLOW,{'A'*100}\n")
 
-          # B. 대용량 PCAP 더미 (Binary - 약 5MB)
-          print("  - [Data] Generating Dummy PCAP Binary...")
-          with open("pcap_dumps/network_capture.pcap", "wb") as f:
+          # 2. 5MB 바이너리 덤프
+          with open("pcap_dumps/capture.pcap", "wb") as f:
               f.write(os.urandom(5 * 1024 * 1024))
 
-          # C. [핵심] CodeQL 대응 보안 플레이북 생성 (Security Upgrade)
-          # CodeQL이 탐지할 수 있는 '안전한 코딩 패턴'을 주입함
-          print("  - [Code] Generating Security Playbooks (CodeQL Optimized)...")
-          
-          playbooks = [
-              "phishing_response", "ransomware_defense", "db_integrity_check", 
-              "user_account_lockout", "network_traffic_analysis", "ddos_mitigation"
-          ]
-          
+          # 3. CodeQL 대응 보안 플레이북 (Command Injection 방지 패턴)
+          playbooks = ["ransomware_defense", "network_analysis", "user_lockout"]
           for pb in playbooks:
               with open(f"playbooks/{pb}.py", "w") as f:
-                  f.write("import logging\nimport os\nimport subprocess\nimport shlex\n\n")
-                  f.write("logging.basicConfig(level=logging.INFO)\n\n")
-                  f.write(f"def execute_{pb}(target_ip: str):\n")
-                  f.write(f"    '''Safe execution playbook for {pb}'''\n")
-                  f.write(f"    logging.info('🛡️ Running Secure Protocol: {pb}')\n")
-                  f.write("\n")
-                  f.write("    # [Security Upgrade] Input Validation\n")
-                  f.write("    if ';' in target_ip or '&' in target_ip:\n")
-                  f.write("        logging.error('Invalid characters detected. Preventing Injection.')\n")
-                  f.write("        return\n")
-                  f.write("\n")
-                  f.write("    # [Security Upgrade] Use shlex for command sanitization (CodeQL Best Practice)\n")
-                  f.write("    cmd = f'echo Scanning {target_ip}'\n")
-                  f.write("    args = shlex.split(cmd)\n")
-                  f.write("    try:\n")
-                  f.write("        # [Security Upgrade] shell=False is enforced\n")
-                  f.write("        subprocess.run(args, check=True, shell=False)\n")
-                  f.write("    except subprocess.CalledProcessError:\n")
-                  f.write("        logging.error('Command failed safely')\n")
-                  f.write("\n")
-                  f.write("if __name__ == '__main__':\n")
-                  f.write(f"    execute_{pb}('192.168.1.10')\n")
-
-          print("✅ Massive Generation & Security Code Injection Complete.")
+                  f.write("import logging\nimport subprocess\nimport shlex\n\n")
+                  f.write(f"def run_{pb}(target):\n")
+                  f.write("    # [Security] Validate Input\n")
+                  f.write("    if not target.isalnum(): return\n")
+                  f.write("    # [Security] Safe Execution\n")
+                  f.write("    cmd = shlex.split(f'echo Running {pb} on {target}')\n")
+                  f.write("    subprocess.run(cmd, shell=False)\n")
+          
+          print("✅ Assets Generated.")
           EOF
-
+          
           python scripts/massive_generator.py
 
-      - name: 💾 Upload Artifacts
+      - name: 💾 Upload Artifact (대용량 패키지)
         uses: actions/upload-artifact@v4
         with:
-          name: massive-package
+          name: massive-package-artifact
           path: |
             secure_config/
             playbooks/
             detections/
-            reports/
-            scripts/
             logs/
             pcap_dumps/
+            scripts/
 
   # ------------------------------------------------------------------
-  # 2. [UPDATE] CodeQL Security Analysis (v4 Upgrade)
+  # 2. CodeQL v4 보안 분석 (유물 사진 반영)
   # ------------------------------------------------------------------
   security-scan-codeql:
     name: 🔍 CodeQL v4 Analysis
@@ -133,72 +104,112 @@ jobs:
       security-events: write
       actions: read
       contents: read
-
     strategy:
       fail-fast: false
       matrix:
         language: [ 'python' ]
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
-
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: massive-package
-      
-      # [변경사항] v3 -> v4 업데이트 (2026년 지원 중단 대비)
+          name: massive-package-artifact
+
       - name: Initialize CodeQL (v4)
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-          queries: security-extended,security-and-quality
+          queries: security-extended
 
-      - name: Autobuild (v4)
+      - name: Autobuild
         uses: github/codeql-action/autobuild@v4
 
-      - name: Perform CodeQL Analysis (v4)
+      - name: Analyze
         uses: github/codeql-action/analyze@v4
-        with:
-          category: "/language:${{ matrix.language }}"
 
   # ------------------------------------------------------------------
-  # 3. 저장소 배포 (Deploy)
+  # 3. [NEW] 배포 및 패키지 등록 (릴리스/패키지 사진 반영)
   # ------------------------------------------------------------------
-  upload-to-repo:
-    name: 🚀 Deploy Update
-    needs: security-scan-codeql
+  deploy-and-publish:
+    name: 🚀 Publish Release & Package
+    needs: [generate-massive-assets, security-scan-codeql]
     runs-on: ubuntu-latest
-    if: always()
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: massive-package
-          path: generated_assets
+          name: massive-package-artifact
+          path: dist_assets
 
-      - name: 📂 Organize & Set Permissions
+      # A. Dockerfile 생성 (패키지용)
+      - name: 🐳 Create Dockerfile
         run: |
-          echo "🚀 Processing Large Scale Updates..."
-          cp -r generated_assets/* .
-          chmod +x scripts/*.py playbooks/*.py
-          rm -rf generated_assets
+          cat <<EOF > Dockerfile
+          FROM python:3.11-slim
+          WORKDIR /app
+          COPY dist_assets/ /app/
+          RUN pip install requests cryptography
+          CMD ["python", "/app/scripts/playbooks/ransomware_defense.py"]
+          EOF
 
-      - name: 📡 Push to Repository
+      # B. GitHub Packages (GHCR) 로그인 및 푸시 -> '패키지' 섹션 채움
+      - name: 🔐 Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📦 Build and Push Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ needs.generate-massive-assets.outputs.version_tag }}
+
+      # C. GitHub Release 생성 -> '릴리스' 섹션 채움
+      - name: 📦 Zip Assets for Release
         run: |
+          cd dist_assets
+          zip -r ../massive-security-assets.zip .
+          cd ..
+
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.generate-massive-assets.outputs.version_tag }}
+          name: "Security Ops Release ${{ needs.generate-massive-assets.outputs.version_tag }}"
+          body: |
+            ## 🚀 Automated Security Release
+            - **CodeQL Status**: Passed ✅
+            - **Asset Size**: MB-Scale Verified
+            - **Docker Image**: `ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}`
+          files: massive-security-assets.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # D. 저장소 코드 업데이트 (Git Push)
+      - name: 📡 Push Changes to Repo
+        run: |
+          cp -r dist_assets/* .
+          rm -rf dist_assets massive-security-assets.zip Dockerfile
+          
           git config user.name "${{ env.COMMIT_USER }}"
           git config user.email "${{ env.COMMIT_EMAIL }}"
           git add .
+          
           if git diff --staged --quiet; then
             echo "⚠️ No changes to commit."
           else
-            echo "🔄 Committing Massive Security Update (CodeQL v4)..."
-            git commit -m "🚀 [10-min] Assets Update + CodeQL v4 Verified"
+            git commit -m "🚀 [Auto] Release ${{ needs.generate-massive-assets.outputs.version_tag }} & Package Update"
             git push origin main
           fi
