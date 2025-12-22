@@ -1,4 +1,4 @@
-Host prod-server
+Host prod-server-main
     HostName 10.10.10.50
     User admin
     IdentityFile ~/.ssh/official_key.pem

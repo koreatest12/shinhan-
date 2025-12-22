@@ -1,0 +1,1 @@
+index=security sourcetype=access_combined | search status=502 | stats count by src_ip
