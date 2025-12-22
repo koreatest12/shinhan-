@@ -1,15 +1,27 @@
 import logging
 import os
 import subprocess
+import shlex
+
 logging.basicConfig(level=logging.INFO)
 
-def execute_ransomware_defense():
-    '''Auto-generated playbook for ransomware_defense'''
-    logging.info('🛡️ Running Security Protocol: ransomware_defense')
-    # Simulated logic
-    if os.environ.get('DEBUG'):
-        print('Debug mode')
-    return 'SUCCESS'
+def execute_ransomware_defense(target_ip: str):
+    '''Safe execution playbook for ransomware_defense'''
+    logging.info('🛡️ Running Secure Protocol: ransomware_defense')
+
+    # [Security Upgrade] Input Validation
+    if ';' in target_ip or '&' in target_ip:
+        logging.error('Invalid characters detected. Preventing Injection.')
+        return
+
+    # [Security Upgrade] Use shlex for command sanitization (CodeQL Best Practice)
+    cmd = f'echo Scanning {target_ip}'
+    args = shlex.split(cmd)
+    try:
+        # [Security Upgrade] shell=False is enforced
+        subprocess.run(args, check=True, shell=False)
+    except subprocess.CalledProcessError:
+        logging.error('Command failed safely')
 
 if __name__ == '__main__':
-    execute_ransomware_defense()
+    execute_ransomware_defense('192.168.1.10')

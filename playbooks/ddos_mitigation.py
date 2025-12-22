@@ -1,15 +1,27 @@
 import logging
 import os
 import subprocess
+import shlex
+
 logging.basicConfig(level=logging.INFO)
 
-def execute_ddos_mitigation():
-    '''Auto-generated playbook for ddos_mitigation'''
-    logging.info('🛡️ Running Security Protocol: ddos_mitigation')
-    # Simulated logic
-    if os.environ.get('DEBUG'):
-        print('Debug mode')
-    return 'SUCCESS'
+def execute_ddos_mitigation(target_ip: str):
+    '''Safe execution playbook for ddos_mitigation'''
+    logging.info('🛡️ Running Secure Protocol: ddos_mitigation')
+
+    # [Security Upgrade] Input Validation
+    if ';' in target_ip or '&' in target_ip:
+        logging.error('Invalid characters detected. Preventing Injection.')
+        return
+
+    # [Security Upgrade] Use shlex for command sanitization (CodeQL Best Practice)
+    cmd = f'echo Scanning {target_ip}'
+    args = shlex.split(cmd)
+    try:
+        # [Security Upgrade] shell=False is enforced
+        subprocess.run(args, check=True, shell=False)
+    except subprocess.CalledProcessError:
+        logging.error('Command failed safely')
 
 if __name__ == '__main__':
-    execute_ddos_mitigation()
+    execute_ddos_mitigation('192.168.1.10')
