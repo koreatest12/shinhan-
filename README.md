@@ -10,7 +10,7 @@
 - **Volume:** 20MB+ of secure logs and traffic dumps generated per run.
 
 ## 📦 Deployment Info
-- **Version:** `v2025.12.31.602`
+- **Version:** `v2025.12.31.603`
 - **Container:** `ghcr.io/koreatest12/secure-ops-vault:latest`
 - **Contents:** All files in this release are **encrypted (.enc)**. You must use the generated key to access them.
 
