@@ -13,6 +13,6 @@ COPY encrypted_vault/ /secure_vault/
 RUN chmod -R 400 /secure_vault
 
 LABEL description="Secure Ops Vault - Encrypted Storage"
-LABEL version="v2026.02.18.2932"
+LABEL version="v2026.02.18.2933"
 
 CMD ["python", "-c", "print('🔒 This container holds encrypted assets. Use the master key to decrypt.')"]
